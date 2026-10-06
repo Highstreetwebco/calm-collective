@@ -285,6 +285,70 @@ if (photoViewer && typeof photoViewer.showModal === 'function') {
   photoViewer.addEventListener('close', () => document.body.classList.remove('gallery-is-open'));
 }
 
+// Gentle homepage slideshow; no layout shift or cropped photographs.
+const heroSlideshow = document.querySelector('.hero-slideshow');
+if (heroSlideshow && photoLinks.length > 1) {
+  const frame = heroSlideshow.querySelector('.hero-slides');
+  const controls = heroSlideshow.querySelector('.hero-slide-controls');
+  const playback = heroSlideshow.querySelector('.hero-playback');
+  const counter = document.querySelector('#hero-photo-count');
+  const motion = window.matchMedia?.('(prefers-reduced-motion: reduce)');
+  let current = 0, timer, loading = false, paused = !!motion?.matches;
+  let hovered = false, inView = true;
+  let active = frame.querySelector('img');
+  let standby = document.createElement('img');
+  standby.className = 'hero-slide'; standby.alt = ''; standby.setAttribute('aria-hidden', 'true');
+  standby.width = 1200; standby.height = 1600; standby.decoding = 'async';
+  frame.append(standby);
+  function scheduleSlide() {
+    clearTimeout(timer);
+    if (!paused && !hovered && inView && !document.hidden && !loading) timer = setTimeout(() => changeSlide(1), 6000);
+  }
+  function setPaused(value) {
+    paused = value;
+    playback.textContent = paused ? 'Play' : 'Pause';
+    playback.setAttribute('aria-label', paused ? 'Play slideshow' : 'Pause slideshow');
+    counter.setAttribute('aria-live', paused ? 'polite' : 'off');
+    scheduleSlide();
+  }
+  async function changeSlide(direction) {
+    if (loading) return;
+    clearTimeout(timer); loading = true;
+    const next = (current + direction + photoLinks.length) % photoLinks.length;
+    const link = photoLinks[next], source = link.querySelector('img');
+    standby.alt = source.alt;
+    standby.sizes = active.sizes;
+    standby.srcset = `${source.getAttribute('src')} 640w, ${link.getAttribute('href')} ${source.getAttribute('width')}w`;
+    standby.src = link.href;
+    try {
+      // Retain the current photo until the replacement is ready.
+      await standby.decode();
+      active.classList.remove('is-active'); active.setAttribute('aria-hidden', 'true');
+      standby.classList.add('is-active'); standby.removeAttribute('aria-hidden');
+      [active, standby] = [standby, active];
+      current = next;
+      document.querySelector('#hero-photo-caption').textContent = link.closest('figure').querySelector('figcaption').textContent;
+      counter.textContent = `${current + 1} / ${photoLinks.length}`;
+    } catch {
+      // A failed photo should never replace a working one with an empty frame.
+      setPaused(true);
+    } finally { loading = false; scheduleSlide(); }
+  }
+  heroSlideshow.querySelector('.hero-previous').addEventListener('click', () => { setPaused(true); changeSlide(-1); });
+  heroSlideshow.querySelector('.hero-next').addEventListener('click', () => { setPaused(true); changeSlide(1); });
+  playback.addEventListener('click', () => setPaused(!paused));
+  heroSlideshow.addEventListener('pointerenter', () => { hovered = true; scheduleSlide(); });
+  heroSlideshow.addEventListener('pointerleave', () => { hovered = false; scheduleSlide(); });
+  heroSlideshow.addEventListener('focusin', event => { if (event.target !== playback) setPaused(true); });
+  document.addEventListener('visibilitychange', scheduleSlide);
+  motion?.addEventListener('change', event => { if (event.matches) setPaused(true); });
+  if ('IntersectionObserver' in window) new IntersectionObserver(entries => {
+    inView = entries[0].isIntersecting; scheduleSlide();
+  }).observe(heroSlideshow);
+  controls.hidden = false;
+  setPaused(paused);
+}
+
 connect();
 
 })();
