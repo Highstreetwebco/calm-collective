@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://jtroth1997.github.io/calm-collective/sitemap.xml
+Sitemap: https://highstreetwebco.github.io/calm-collective/sitemap.xml
