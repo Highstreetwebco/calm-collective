@@ -222,6 +222,40 @@ document.addEventListener('keydown', event => { if (event.key === 'Escape') clos
 if ('IntersectionObserver' in window) new IntersectionObserver(entries => {
   document.querySelector('.mobile-booking').classList.toggle('is-hidden', entries[0].isIntersecting);
 }, { threshold: 0 }).observe(document.querySelector('#booking'));
+// Native dialog keeps keyboard focus inside the full-size photograph viewer.
+const photoLinks = [...document.querySelectorAll('.gallery-open')];
+const photoViewer = document.querySelector('#photo-viewer');
+let currentPhoto = 0;
+function showPhoto(index) {
+  currentPhoto = (index + photoLinks.length) % photoLinks.length;
+  const link = photoLinks[currentPhoto];
+  const preview = link.querySelector('img');
+  const photo = document.querySelector('#viewer-image');
+  photo.src = link.href;
+  photo.alt = preview.alt;
+  document.querySelector('#viewer-caption').textContent = link.closest('figure').querySelector('figcaption').textContent;
+  document.querySelector('#photo-counter').textContent = `Photo ${currentPhoto + 1} of ${photoLinks.length}`;
+}
+if (photoViewer && typeof photoViewer.showModal === 'function') {
+  photoLinks.forEach((link, index) => link.addEventListener('click', event => {
+    event.preventDefault(); showPhoto(index); photoViewer.showModal();
+    document.body.classList.add('gallery-is-open');
+  }));
+  photoViewer.querySelector('.viewer-close').addEventListener('click', () => photoViewer.close());
+  photoViewer.querySelector('.viewer-previous').addEventListener('click', () => showPhoto(currentPhoto - 1));
+  photoViewer.querySelector('.viewer-next').addEventListener('click', () => showPhoto(currentPhoto + 1));
+  photoViewer.addEventListener('keydown', event => {
+    if (event.key === 'ArrowRight') { event.preventDefault(); showPhoto(currentPhoto + 1); }
+    if (event.key === 'ArrowLeft') { event.preventDefault(); showPhoto(currentPhoto - 1); }
+  });
+  photoViewer.addEventListener('click', event => {
+    if (event.target !== photoViewer) return;
+    const rect = photoViewer.getBoundingClientRect();
+    if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) photoViewer.close();
+  });
+  photoViewer.addEventListener('close', () => document.body.classList.remove('gallery-is-open'));
+}
+
 connect();
 
 })();
