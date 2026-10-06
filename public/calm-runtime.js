@@ -43,8 +43,9 @@ function jsonp(params) {
   });
 }
 function intent() { return form.elements.intent.value; }
+function isScheduled() { return intent() !== 'enquiry' && form.elements.schedule.value === 'specific'; }
 function calendarReady() {
-  return connection === 'calendar' && calendarCapabilities && (intent() === 'viewing' ? calendarCapabilities.viewing : calendarCapabilities.rooms.includes(form.elements.room.value));
+  return isScheduled() && connection === 'calendar' && calendarCapabilities && (intent() === 'viewing' ? calendarCapabilities.viewing : calendarCapabilities.rooms.includes(form.elements.room.value));
 }
 function displayStep(next) {
   step = next;
@@ -53,15 +54,15 @@ function displayStep(next) {
   if (step === 2) renderSummary();
   const legend = stepFields[step].querySelector('legend');
   legend.tabIndex = -1; legend.focus({ preventScroll: true });
-  document.querySelector('.booking-card').scrollIntoView({ block: 'start', behavior: 'smooth' });
+  document.querySelector('.booking-card').scrollIntoView({ block: 'start', behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
   setStatus(connection === 'offline' ? 'Online requests are temporarily unavailable. Please call 07508 070295 or email the team.' : '', connection === 'offline');
 }
-function validStep() {
-  if (step === 0) {
+function validStep(index = step) {
+  if (index === 0 && isScheduled()) {
     if (!dateInput.reportValidity()) return false;
     if (!timeInput.value) { setStatus('Please choose a preferred time.', true); timeGrid.querySelector('button')?.focus(); return false; }
   }
-  for (const input of stepFields[step].querySelectorAll('input, select, textarea')) {
+  for (const input of stepFields[index].querySelectorAll('input, select, textarea')) {
     if (!input.checkValidity()) { input.reportValidity(); return false; }
   }
   return true;
@@ -72,10 +73,9 @@ function formatDate(value) { return new Date(`${value}T12:00:00`).toLocaleDateSt
 function entries() {
   const data = new FormData(form);
   return {
-    Request: intent() === 'viewing' ? 'Viewing' : 'Room hire',
+    Request: {viewing: 'Viewing', room: 'Room hire', enquiry: 'Question about room hire'}[intent()],
     Room: form.elements.room.selectedOptions[0].textContent,
-    Date: formatDate(data.get('date')),
-    Time: `${data.get('time')} (UK time)`,
+    ...(isScheduled() ? { Date: formatDate(data.get('date')), Time: `${data.get('time')} (UK time)` } : { Dates: 'To discuss with the team' }),
     ...(intent() === 'room' ? { Length: form.elements.duration.selectedOptions[0].textContent, Pattern: data.get('frequency') } : {}),
     Name: data.get('name'), Email: data.get('email'), Phone: data.get('phone'),
     Practice: data.get('therapyType') === 'Other' ? data.get('otherTherapy') : data.get('therapyType'),
@@ -90,12 +90,26 @@ function renderSummary() {
   }
 }
 function updateIntent() {
-  document.querySelectorAll('[data-room-only]').forEach(label => label.hidden = intent() !== 'room');
+  const scheduled = isScheduled();
+  document.querySelectorAll('[data-room-only]').forEach(label => {
+    label.hidden = intent() !== 'room';
+    label.querySelector('select').disabled = intent() !== 'room';
+  });
+  const choice = document.querySelector('[data-schedule-choice]');
+  choice.hidden = intent() === 'enquiry';
+  choice.firstChild.textContent = intent() === 'room' ? 'When would you like a room?' : 'When would you like to visit?';
+  document.querySelector('[data-date-field]').hidden = !scheduled;
+  document.querySelector('.time-picker').hidden = !scheduled;
+  document.querySelector('.schedule-help').hidden = scheduled;
+  dateInput.required = scheduled; dateInput.disabled = !scheduled;
+  timeInput.disabled = !scheduled;
   loadAvailability();
 }
 form.querySelectorAll('[name=intent]').forEach(input => input.addEventListener('change', updateIntent));
 [dateInput, form.elements.room, form.elements.duration].forEach(input => input.addEventListener('change', loadAvailability));
 retryButton.addEventListener('click', loadAvailability);
+form.elements.schedule.addEventListener('change', updateIntent);
+document.querySelector('#retry-service').addEventListener('click', connect);
 form.elements.therapyType.addEventListener('change', () => {
   const other = form.elements.therapyType.value === 'Other';
   document.querySelector('#other-therapy-field').hidden = !other;
@@ -118,6 +132,7 @@ function renderTimes(slots, version) {
 async function loadAvailability() {
   const version = ++availabilityVersion;
   timeInput.value = ''; timeGrid.replaceChildren(); retryButton.hidden = true;
+  if (!isScheduled()) return;
   if (!dateInput.value || !dateInput.checkValidity()) { availabilityMessage.textContent = 'Choose a date within the next 90 days.'; return; }
   if (connection === 'checking') { availabilityMessage.textContent = 'Checking the request service…'; return; }
   if (calendarReady()) {
@@ -142,6 +157,10 @@ async function loadAvailability() {
   }
 }
 async function connect() {
+  if (submissionStarted) return;
+  connection = 'checking';
+  document.querySelector('#retry-service').hidden = true;
+  setStatus('Connecting the enquiry form…');
   try {
     const health = await jsonp({ action: 'booking-health' });
     if (health.ok && health.version === 2) {
@@ -152,26 +171,32 @@ async function connect() {
       connection = 'enquiry';
     }
   } catch { connection = 'offline'; }
+  form.querySelector('.request').disabled = connection === 'offline';
+  document.querySelector('#retry-service').hidden = connection !== 'offline';
   if (connection === 'offline') {
-    form.querySelector('.request').disabled = true;
     setStatus('Online requests are temporarily unavailable. Please call 07508 070295 or email calmcollectivebooking@gmail.com.', true);
-  }
+  } else setStatus('');
   loadAvailability();
 }
 form.addEventListener('submit', async event => {
   event.preventDefault();
   if (step < 2) { if (validStep()) displayStep(step + 1); return; }
-  if (submitting || submissionStarted || !validStep()) return;
+  if (submitting || submissionStarted) return;
+  for (let index = 0; index < stepFields.length; index++) {
+    if (![...stepFields[index].querySelectorAll('input, select, textarea')].every(input => input.checkValidity()) || (index === 0 && isScheduled() && !timeInput.value)) {
+      displayStep(index); validStep(index); return;
+    }
+  }
   if (connection === 'checking') { setStatus('The request service is still connecting. Please wait a moment.', true); return; }
   if (connection === 'offline') { setStatus('Please call 07508 070295 or email the team to make your request.', true); return; }
   submitting = true;
   requestId = crypto.randomUUID();
   const data = Object.fromEntries(new FormData(form));
   const summary = Object.entries(entries()).map(([key,value]) => `${key}: ${value}`).join('\n');
-  const payload = connection === 'calendar' ? { ...data, action: 'request', requestId } : {
-    action: 'enquiry', requestId, name: data.name, phone: data.phone, therapyType: data.therapyType,
+  const payload = connection === 'calendar' && isScheduled() ? { ...data, action: 'request', requestId } : {
+    action: 'enquiry', requestId, name: data.name, email: data.email, phone: data.phone, therapyType: data.therapyType,
     otherTherapy: data.otherTherapy, callbackTime: 'Contact by phone or email', website: data.website,
-    notes: `BOOKING REQUEST — NOT CONFIRMED\nReference: ${requestId}\n${summary}`.slice(0, 1800)
+    notes: `ROOM HIRE ENQUIRY — NOT A CONFIRMED BOOKING\nReference: ${requestId}\n${summary}`.slice(0, 1800)
   };
   form.querySelectorAll('button, input, select, textarea').forEach(control => control.disabled = true);
   setStatus('Sending your request…');
@@ -196,6 +221,7 @@ form.addEventListener('submit', async event => {
     } else if (result?.state === 'failed') {
       submissionStarted = false;
       form.querySelectorAll('button, input, select, textarea').forEach(control => control.disabled = false);
+      updateIntent();
       setStatus('The request was not accepted. Please check the date and time again, or contact the team.', true);
       // Refresh availability before allowing another calendar request.
       if (calendarReady()) { displayStep(0); await loadAvailability(); setStatus('That request could not be accepted. Please choose a time again or contact us.', true); }
@@ -207,9 +233,10 @@ form.addEventListener('submit', async event => {
 });
 // Browser validation cannot focus a control inside a previous hidden step.
 form.noValidate = true;
+updateIntent();
 document.querySelectorAll('.room-select').forEach(link => link.addEventListener('click', () => {
   if (submissionStarted) return;
-  form.elements.room.value = link.dataset.room; form.elements.intent.value = 'room'; displayStep(0); updateIntent();
+  form.elements.room.value = link.dataset.room; form.elements.intent.value = 'enquiry'; displayStep(0); updateIntent();
 }));
 document.querySelectorAll('[data-intent]').forEach(link => link.addEventListener('click', () => {
   if (submissionStarted) return;
