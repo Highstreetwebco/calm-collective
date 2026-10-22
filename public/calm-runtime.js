@@ -154,6 +154,42 @@ if (photoViewer && typeof photoViewer.showModal === 'function') {
   });
   photoViewer.addEventListener('close', () => document.body.classList.remove('gallery-is-open'));
 }
-
-
+// Load the decorative loop only when motion is welcome, or on explicit play.
+const backgroundVideo = document.querySelector('#hero-video');
+const videoToggle = document.querySelector('.video-toggle');
+if (backgroundVideo && videoToggle) {
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+  backgroundVideo.muted = true;
+  backgroundVideo.autoplay = !reducedMotion.matches && !navigator.connection?.saveData;
+  videoToggle.hidden = false;
+  function updateVideoControl() {
+    const action = backgroundVideo.paused ? 'Play' : 'Pause';
+    videoToggle.textContent = `${action} video`;
+    videoToggle.setAttribute('aria-label', `${action} background video`);
+  }
+  function playBackgroundVideo() {
+    if (!backgroundVideo.getAttribute('src')) backgroundVideo.src = backgroundVideo.dataset.src;
+    backgroundVideo.play().catch(updateVideoControl);
+  }
+  backgroundVideo.addEventListener('playing', () => {
+    backgroundVideo.classList.add('is-ready');
+    updateVideoControl();
+  });
+  backgroundVideo.addEventListener('pause', updateVideoControl);
+  backgroundVideo.addEventListener('error', () => {
+    backgroundVideo.classList.remove('is-ready');
+    videoToggle.hidden = true;
+  });
+  videoToggle.addEventListener('click', () => {
+    if (backgroundVideo.paused) playBackgroundVideo();
+    else backgroundVideo.pause();
+  });
+  reducedMotion.addEventListener('change', event => {
+    if (event.matches) {
+      backgroundVideo.autoplay = false;
+      backgroundVideo.pause();
+    }
+  });
+  if (backgroundVideo.autoplay) playBackgroundVideo();
+}
 })();

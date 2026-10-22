@@ -15,7 +15,7 @@
 @media(max-width:1050px){.coastal-hero{grid-template-columns:1fr 1.05fr}.coastal-hero h1{font-size:clamp(2.8rem,4.5vw,4.5rem)}.hero-brand{padding:.6rem .8rem}.hero-brand .brand-logo{width:110px}.hero-brand .brand-main>span{font-size:2.2rem}.hero-brand .brand-lotus{width:42px}.welcome-section{gap:5%}}
 @media(max-width:760px){.coastal-hero{grid-template-columns:1fr;gap:2rem}.coastal-hero h1{font-size:clamp(2.8rem,10vw,4.6rem)}.coastal-hero .hero-intro{font-size:1.05rem;margin:1.2rem 0 1.5rem}.coastal-photo{max-width:none}.hero-brand{left:.7rem;top:.7rem}.welcome-section{grid-template-columns:1fr;gap:1.5rem}.room-detail{grid-template-columns:1fr;gap:1.7rem;padding-top:2rem;scroll-margin-top:95px}.room-details{gap:3rem}.room-description h3{font-size:3rem}.room-description p{font-size:.94rem}.room-jumps{gap:.7rem;margin-bottom:1.5rem}.room-jumps a{margin-right:.8rem;font-size:.85rem}.room-photographs img{max-height:420px}.room-description .button{width:100%}.booking-section .form-grid{grid-template-columns:1fr}.hero-brand .brand-logo>small{font-size:.54rem}}
 
-/* Full-screen photographic opening, with the navigation and copy over the sea. */
+/* Full-screen coastal video, with the navigation and copy over the sea. */
 .site-header{position:absolute;inset:0 0 auto;background:transparent;backdrop-filter:none;border-bottom:0;color:#fffdf8}
 .site-header .brand-logo,.site-header .menu-toggle{color:#fffdf8}
 .site-header nav a:hover{color:#e1eade}
@@ -23,7 +23,12 @@
 .site-header .header-cta:hover{background:#e3e9df}
 .coastal-hero{position:relative;isolation:isolate;display:flex;align-items:center;width:100%;min-height:100vh;min-height:100svh;padding:150px 7% 70px;overflow:hidden;background:#213f39}
 .coastal-hero .coastal-photo{position:absolute;inset:0;z-index:-2;width:100%;height:100%;max-width:none;margin:0;border:0;border-radius:0;box-shadow:none;background:none}
-.coastal-hero .coastal-photo>img{display:block;width:100%;height:100%;max-width:none;aspect-ratio:auto;object-fit:cover;object-position:center}
+.coastal-hero .coastal-photo>img,.coastal-hero .hero-video{display:block;width:100%;height:100%;max-width:none;aspect-ratio:auto;object-fit:cover;object-position:center}
+.coastal-hero .hero-video{position:absolute;inset:0;opacity:0;pointer-events:none}
+.coastal-hero .hero-video.is-ready{opacity:1}
+.video-toggle{position:absolute;right:2rem;bottom:1.5rem;min-height:44px;padding:.6rem .9rem;border:1px solid #fffdf880;border-radius:4px;background:#102b23b3;color:#fffdf8;font:inherit;font-size:.78rem;cursor:pointer}
+.video-toggle:hover{background:#102b23e6}
+.video-toggle[hidden]{display:none}
 .coastal-hero::before{content:'';position:absolute;inset:0;z-index:-1;background:linear-gradient(90deg,rgba(10,34,30,.77) 0%,rgba(10,34,30,.54) 38%,rgba(10,34,30,.08) 72%),linear-gradient(180deg,rgba(10,34,30,.5),transparent 28%,rgba(10,34,30,.14))}
 .coastal-hero .hero-copy{max-width:640px;color:#fffdf8}
 .coastal-hero h1{font-size:clamp(3.3rem,5.3vw,6.2rem);line-height:1.04;text-shadow:0 2px 20px #132d2a33}
@@ -36,7 +41,8 @@
 @media(max-width:760px){
  .site-header nav{background:var(--forest);border-color:#587367;box-shadow:0 10px 20px #102b2326}
  .coastal-hero{padding:120px 6% 110px;gap:0;align-items:center}
- .coastal-hero .coastal-photo>img{object-position:70% center}
+ .coastal-hero .coastal-photo>img,.coastal-hero .hero-video{object-position:70% center}
+ .video-toggle{right:6%;bottom:88px}
  .coastal-hero::before{background:linear-gradient(90deg,rgba(10,34,30,.68),rgba(10,34,30,.25)),linear-gradient(180deg,rgba(10,34,30,.38),transparent 60%,rgba(10,34,30,.15))}
  .coastal-hero h1{font-size:clamp(2.8rem,10.4vw,4.8rem);line-height:1.07}
  .coastal-hero .hero-intro{font-size:1.05rem;margin:1.4rem 0 1.8rem;max-width:23rem}
