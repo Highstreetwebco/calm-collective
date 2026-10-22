@@ -1,0 +1,49 @@
+name: Publish Calm Collective
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    name: Build and publish current website
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Check out this revision
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Prepare the public website
+        run: |
+          node --check script.js
+          node scripts/sync-surfaces.mjs
+          test -s dist/index.html
+          test -s dist/public/photos/coastal-calm-loop.mp4
+          touch dist/.nojekyll
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+      - name: Upload the public website
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+      - name: Publish to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
