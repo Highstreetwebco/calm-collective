@@ -130,7 +130,6 @@ function showPhoto(index) {
   const photo = document.querySelector('#viewer-image');
   photo.src = link.href;
   photo.alt = preview.alt;
-  document.querySelector('#viewer-caption').textContent = link.closest('figure').querySelector('figcaption').textContent;
   document.querySelector('#photo-counter').textContent = `Photo ${currentPhoto + 1} of ${photoLinks.length}`;
 }
 if (photoViewer && typeof photoViewer.showModal === 'function') {
