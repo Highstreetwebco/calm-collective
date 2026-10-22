@@ -2,26 +2,19 @@ window.CALM_BOOKING_API_URL = 'https://script.google.com/macros/s/AKfycbx-0Gj8U1
 
 (() => {
 const form = document.querySelector('#booking-form');
+if (!form || form.dataset.initialised) return;
+form.dataset.initialised = 'true';
 const status = document.querySelector('#booking-status');
+const submit = form.querySelector('.request');
+const delivery = document.querySelector('#form-delivery-note');
+const recipient = 'calmcollectiverooms@gmail.com';
 const api = window.CALM_BOOKING_API_URL || '';
-const stepFields = [...form.querySelectorAll('[data-step]')];
-const progress = [...document.querySelectorAll('.steps li')];
-const dateInput = form.elements.date;
-const timeInput = form.elements.time;
-const timeGrid = document.querySelector('#time-grid');
-const availabilityMessage = document.querySelector('#availability-message');
-const retryButton = document.querySelector('#retry-availability');
-let step = 0, availabilityVersion = 0, submitting = false, connection = 'checking';
-let calendarCapabilities = null;
-let requestId = null;
-let submissionStarted = false;
-
-function londonDate(date = new Date()) {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London', year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
+let directDelivery = false, submitting = false, submitted = false;
+let draftText = '';
+function setStatus(text, error = false) {
+  status.textContent = text;
+  status.className = error ? 'error' : '';
 }
-dateInput.min = londonDate(new Date(Date.now() + 86400000));
-dateInput.max = londonDate(new Date(Date.now() + 90 * 86400000));
-function setStatus(text, error = false) { status.textContent = text; status.className = error ? 'error' : ''; }
 function jsonp(params) {
   return new Promise((resolve, reject) => {
     if (!api) return reject(new Error('Service unavailable'));
@@ -31,217 +24,94 @@ function jsonp(params) {
     const finish = (error, result) => {
       if (done) return;
       done = true; clearTimeout(timer); script.remove();
-      window[callback] = () => {}; // late responses must not throw after timeout
+      window[callback] = () => {};
       setTimeout(() => delete window[callback], 60000);
       error ? reject(error) : resolve(result);
     };
-    const timer = setTimeout(() => finish(new Error('Service timed out')), 12000);
+    const timer = setTimeout(() => finish(new Error('Service timed out')), 6000);
     window[callback] = result => finish(null, result);
     script.onerror = () => finish(new Error('Service unavailable'));
     script.src = `${api}?${new URLSearchParams({ ...params, callback })}`;
     document.head.append(script);
   });
 }
-function intent() { return form.elements.intent.value; }
-function isScheduled() { return intent() !== 'enquiry' && form.elements.schedule.value === 'specific'; }
-function calendarReady() {
-  return isScheduled() && connection === 'calendar' && calendarCapabilities && (intent() === 'viewing' ? calendarCapabilities.viewing : calendarCapabilities.rooms.includes(form.elements.room.value));
-}
-function displayStep(next) {
-  step = next;
-  stepFields.forEach((field, index) => { field.hidden = index !== step; });
-  progress.forEach((item, index) => index === step ? item.setAttribute('aria-current', 'step') : item.removeAttribute('aria-current'));
-  if (step === 2) renderSummary();
-  const legend = stepFields[step].querySelector('legend');
-  legend.tabIndex = -1; legend.focus({ preventScroll: true });
-  document.querySelector('.booking-card').scrollIntoView({ block: 'start', behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
-  setStatus(connection === 'offline' ? 'Online requests are temporarily unavailable. Please call 07508 070295 or email the team.' : '', connection === 'offline');
-}
-function validStep(index = step) {
-  if (index === 0 && isScheduled()) {
-    if (!dateInput.reportValidity()) return false;
-    if (!timeInput.value) { setStatus('Please choose a preferred time.', true); timeGrid.querySelector('button')?.focus(); return false; }
-  }
-  for (const input of stepFields[index].querySelectorAll('input, select, textarea')) {
-    if (!input.checkValidity()) { input.reportValidity(); return false; }
-  }
-  return true;
-}
-form.querySelectorAll('.next-step').forEach(button => button.addEventListener('click', () => { if (validStep()) displayStep(step + 1); }));
-form.querySelectorAll('.back-step').forEach(button => button.addEventListener('click', () => displayStep(step - 1)));
-function formatDate(value) { return new Date(`${value}T12:00:00`).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }); }
-function entries() {
+function enquiryText() {
   const data = new FormData(form);
-  return {
-    Request: {viewing: 'Viewing', room: 'Room hire', enquiry: 'Question about room hire'}[intent()],
-    Room: form.elements.room.selectedOptions[0].textContent,
-    ...(isScheduled() ? { Date: formatDate(data.get('date')), Time: `${data.get('time')} (UK time)` } : { Dates: 'To discuss with the team' }),
-    ...(intent() === 'room' ? { Length: form.elements.duration.selectedOptions[0].textContent, Pattern: data.get('frequency') } : {}),
-    Name: data.get('name'), Email: data.get('email'), Phone: data.get('phone'),
-    Practice: data.get('therapyType') === 'Other' ? data.get('otherTherapy') : data.get('therapyType'),
-    ...(data.get('notes') ? { Notes: data.get('notes') } : {})
-  };
+  return [
+    'Calm Collective room enquiry', '',
+    `Name: ${String(data.get('name')).trim()}`,
+    `Email: ${String(data.get('email')).trim()}`,
+    `Room: ${form.elements.room.selectedOptions[0].textContent}`,
+    `Dates: ${String(data.get('dates')).trim() || 'Flexible / to discuss'}`,
+    `Questions: ${String(data.get('notes')).trim() || 'None'}`,
+    '', 'This is an enquiry, not a confirmed booking.'
+  ].join('\n');
 }
-function renderSummary() {
-  const summary = document.querySelector('#request-summary'); summary.replaceChildren();
-  for (const [key, value] of Object.entries(entries())) {
-    const dt = document.createElement('dt'), dd = document.createElement('dd');
-    dt.textContent = key; dd.textContent = value; summary.append(dt, dd);
-  }
-}
-function updateIntent() {
-  const scheduled = isScheduled();
-  document.querySelectorAll('[data-room-only]').forEach(label => {
-    label.hidden = intent() !== 'room';
-    label.querySelector('select').disabled = intent() !== 'room';
-  });
-  const choice = document.querySelector('[data-schedule-choice]');
-  choice.hidden = intent() === 'enquiry';
-  choice.firstChild.textContent = intent() === 'room' ? 'When would you like a room?' : 'When would you like to visit?';
-  document.querySelector('[data-date-field]').hidden = !scheduled;
-  document.querySelector('.time-picker').hidden = !scheduled;
-  document.querySelector('.schedule-help').hidden = scheduled;
-  dateInput.required = scheduled; dateInput.disabled = !scheduled;
-  timeInput.disabled = !scheduled;
-  loadAvailability();
-}
-form.querySelectorAll('[name=intent]').forEach(input => input.addEventListener('change', updateIntent));
-[dateInput, form.elements.room, form.elements.duration].forEach(input => input.addEventListener('change', loadAvailability));
-retryButton.addEventListener('click', loadAvailability);
-form.elements.schedule.addEventListener('change', updateIntent);
-document.querySelector('#retry-service').addEventListener('click', connect);
-form.elements.therapyType.addEventListener('change', () => {
-  const other = form.elements.therapyType.value === 'Other';
-  document.querySelector('#other-therapy-field').hidden = !other;
-  form.elements.otherTherapy.required = other;
-});
-function renderTimes(slots, version) {
-  if (version !== availabilityVersion) return;
-  timeGrid.replaceChildren();
-  slots.forEach(slot => {
-    const button = document.createElement('button'); button.type = 'button'; button.textContent = slot;
-    button.setAttribute('aria-pressed', 'false');
-    button.addEventListener('click', () => {
-      timeInput.value = slot;
-      [...timeGrid.children].forEach(item => item.setAttribute('aria-pressed', String(item === button)));
-      setStatus('');
-    });
-    timeGrid.append(button);
-  });
-}
-async function loadAvailability() {
-  const version = ++availabilityVersion;
-  timeInput.value = ''; timeGrid.replaceChildren(); retryButton.hidden = true;
-  if (!isScheduled()) return;
-  if (!dateInput.value || !dateInput.checkValidity()) { availabilityMessage.textContent = 'Choose a date within the next 90 days.'; return; }
-  if (connection === 'checking') { availabilityMessage.textContent = 'Checking the request service…'; return; }
-  if (calendarReady()) {
-    availabilityMessage.textContent = 'Checking the calendar…';
-    try {
-      const result = await jsonp({ action: 'availability', date: dateInput.value, intent: intent(), room: form.elements.room.value, duration: intent() === 'viewing' ? '60' : form.elements.duration.value });
-      if (version !== availabilityVersion) return;
-      if (!result.ok || !Array.isArray(result.slots)) throw new Error('Unable to check availability');
-      const slots = result.slots.filter(slot => /^([01]\d|2[0-3]):[0-5]\d$/.test(slot));
-      availabilityMessage.textContent = slots.length ? 'Times currently free in the diary. Requests still need team approval. All times are UK time.' : 'No times available on this date. Please choose another day or contact us.';
-      renderTimes(slots, version);
-    } catch {
-      if (version !== availabilityVersion) return;
-      availabilityMessage.textContent = 'We couldn’t check the diary. Try again or call 07508 070295.';
-      retryButton.hidden = false;
-    }
-  } else {
-    availabilityMessage.textContent = 'Choose a preferred time for the team to check. These are request times, not confirmed availability. All times are UK time.';
-    const start = intent() === 'viewing' ? 10 : 8;
-    const end = intent() === 'viewing' ? 15 : 21 - Number(form.elements.duration.value) / 60;
-    renderTimes(Array.from({ length: end - start + 1 }, (_, i) => `${String(start + i).padStart(2, '0')}:00`), version);
-  }
-}
-async function connect() {
-  if (submissionStarted) return;
-  connection = 'checking';
-  document.querySelector('#retry-service').hidden = true;
-  setStatus('Connecting the enquiry form…');
-  try {
-    const health = await jsonp({ action: 'booking-health' });
-    if (health.ok && health.version === 2) {
-      connection = 'calendar'; calendarCapabilities = { viewing: health.viewing === true, rooms: Array.isArray(health.rooms) ? health.rooms : [] };
-    } else {
-      const legacy = await jsonp({ action: 'enquiry-health' });
-      if (!legacy.ok || legacy.mode !== 'callback-enquiry') throw new Error('Service unavailable');
-      connection = 'enquiry';
-    }
-  } catch { connection = 'offline'; }
-  form.querySelector('.request').disabled = connection === 'offline';
-  document.querySelector('#retry-service').hidden = connection !== 'offline';
-  if (connection === 'offline') {
-    setStatus('Online requests are temporarily unavailable. Please call 07508 070295 or email calmcollectivebooking@gmail.com.', true);
-  } else setStatus('');
-  loadAvailability();
+function prepareEmail() {
+  draftText = enquiryText();
+  const link = document.querySelector('#email-draft-link');
+  link.href = `mailto:${recipient}?subject=${encodeURIComponent('Calm Collective room enquiry')}&body=${encodeURIComponent(draftText)}`;
+  document.querySelector('#email-fallback').hidden = false;
+  setStatus('Your email draft is ready. Review it in your email app and press Send. Nothing has been sent by this website.');
+  link.click();
 }
 form.addEventListener('submit', async event => {
   event.preventDefault();
-  if (step < 2) { if (validStep()) displayStep(step + 1); return; }
-  if (submitting || submissionStarted) return;
-  for (let index = 0; index < stepFields.length; index++) {
-    if (![...stepFields[index].querySelectorAll('input, select, textarea')].every(input => input.checkValidity()) || (index === 0 && isScheduled() && !timeInput.value)) {
-      displayStep(index); validStep(index); return;
-    }
-  }
-  if (connection === 'checking') { setStatus('The request service is still connecting. Please wait a moment.', true); return; }
-  if (connection === 'offline') { setStatus('Please call 07508 070295 or email the team to make your request.', true); return; }
+  if (submitting || submitted || !form.reportValidity()) return;
+  if (!form.elements.name.value.trim()) { form.elements.name.focus(); setStatus('Please enter your name.', true); return; }
+  if (form.elements.website.value) return;
+  if (!directDelivery) { prepareEmail(); return; }
   submitting = true;
-  requestId = crypto.randomUUID();
-  const data = Object.fromEntries(new FormData(form));
-  const summary = Object.entries(entries()).map(([key,value]) => `${key}: ${value}`).join('\n');
-  const payload = connection === 'calendar' && isScheduled() ? { ...data, action: 'request', requestId } : {
-    action: 'enquiry', requestId, name: data.name, email: data.email, phone: data.phone, therapyType: data.therapyType,
-    otherTherapy: data.otherTherapy, callbackTime: 'Contact by phone or email', website: data.website,
-    notes: `ROOM HIRE ENQUIRY — NOT A CONFIRMED BOOKING\nReference: ${requestId}\n${summary}`.slice(0, 1800)
-  };
-  form.querySelectorAll('button, input, select, textarea').forEach(control => control.disabled = true);
-  setStatus('Sending your request…');
+  const requestId = crypto.randomUUID();
+  const payload = { ...Object.fromEntries(new FormData(form)), action: 'contact', requestId };
+  form.querySelectorAll('input, select, textarea, button').forEach(control => control.disabled = true);
+  setStatus('Sending your enquiry…');
   try {
-    submissionStarted = true;
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
-    try { await fetch(api, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(payload), signal: controller.signal }); }
-    finally { clearTimeout(timeout); }
+    const timer = setTimeout(() => controller.abort(), 15000);
+    try {
+      await fetch(api, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(payload), signal: controller.signal });
+    } finally { clearTimeout(timer); }
     let result;
     for (let attempt = 0; attempt < 6; attempt++) {
       result = await jsonp({ action: 'status', requestId });
       if (result.state !== 'processing') break;
       await new Promise(resolve => setTimeout(resolve, 1000));
     }
-    if (result?.ok && ['confirmed', 'received', 'pending'].includes(result.state)) {
-      stepFields.forEach(field => field.hidden = true);
-      document.querySelector('.steps').hidden = true;
-      const success = document.querySelector('#booking-success'); success.hidden = false;
-      document.querySelector('#request-reference').textContent = `Your reference: ${requestId}`;
-      setStatus(''); success.focus();
+    if (result?.ok && result.state === 'received') {
+      submitted = true;
+      submit.textContent = 'Enquiry received';
+      setStatus(`Thank you. Your enquiry has been received. We’ll contact you to discuss the details. Your booking is not confirmed yet. Reference: ${requestId}`);
     } else if (result?.state === 'failed') {
-      submissionStarted = false;
-      form.querySelectorAll('button, input, select, textarea').forEach(control => control.disabled = false);
-      updateIntent();
-      setStatus('The request was not accepted. Please check the date and time again, or contact the team.', true);
-      // Refresh availability before allowing another calendar request.
-      if (calendarReady()) { displayStep(0); await loadAvailability(); setStatus('That request could not be accepted. Please choose a time again or contact us.', true); }
-    } else throw new Error('Uncertain result');
+      form.querySelectorAll('input, select, textarea, button').forEach(control => control.disabled = false);
+      setStatus('Your enquiry was not accepted. Check your details or email calmcollectiverooms@gmail.com.', true);
+    } else throw new Error('Receipt uncertain');
   } catch {
-    setStatus(`We couldn’t verify receipt. Please contact the team with reference ${requestId} before submitting another request.`, true);
-    // A timed-out POST may have succeeded. Do not invite a duplicate submission.
+    submitted = true; // A timed-out POST may have succeeded. Prevent duplicate enquiries.
+    setStatus(`We couldn’t verify receipt. Please contact ${recipient} with reference ${requestId} before sending another enquiry.`, true);
   } finally { submitting = false; }
 });
-// Browser validation cannot focus a control inside a previous hidden step.
-form.noValidate = true;
-updateIntent();
+document.querySelector('#copy-enquiry').addEventListener('click', async () => {
+  try { await navigator.clipboard.writeText(draftText); setStatus(`Enquiry copied. Paste it into an email to ${recipient}.`); }
+  catch { setStatus(`Copy is unavailable in this browser. Use “Open enquiry email” or email ${recipient} directly.`, true); }
+});
 document.querySelectorAll('.room-select').forEach(link => link.addEventListener('click', () => {
-  if (submissionStarted) return;
-  form.elements.room.value = link.dataset.room; form.elements.intent.value = 'enquiry'; displayStep(0); updateIntent();
+  if (submitting || submitted) return;
+  form.elements.room.value = link.dataset.room;
 }));
-document.querySelectorAll('[data-intent]').forEach(link => link.addEventListener('click', () => {
-  if (submissionStarted) return;
-  form.elements.intent.value = link.dataset.intent; displayStep(0); updateIntent();
+document.querySelectorAll('[data-intent="viewing"]').forEach(link => link.addEventListener('click', () => {
+  if (submitting || submitted) return;
+  if (!form.elements.notes.value.trim()) form.elements.notes.value = 'I’d like to arrange a viewing.';
 }));
+// Enable direct delivery only when the deployed bridge explicitly supports the
+// five-field form AND confirms the new mailbox. Never send through the old route.
+jsonp({ action: 'contact-health' }).then(health => {
+  if (submitting || submitted || !health.ok || health.mode !== 'room-enquiry' || health.recipient !== recipient) return;
+  directDelivery = true;
+  submit.textContent = 'Send enquiry';
+  delivery.textContent = 'Send your enquiry to the Calm Collective team. We’ll reply by email to discuss your room and dates.';
+}).catch(() => {});
+
 const menuButton = document.querySelector('.menu-toggle');
 const nav = document.querySelector('#main-nav');
 function closeMenu() { menuButton.setAttribute('aria-expanded','false'); nav.classList.remove('is-open'); }
@@ -285,70 +155,5 @@ if (photoViewer && typeof photoViewer.showModal === 'function') {
   photoViewer.addEventListener('close', () => document.body.classList.remove('gallery-is-open'));
 }
 
-// Gentle homepage slideshow; no layout shift or cropped photographs.
-const heroSlideshow = document.querySelector('.hero-slideshow');
-if (heroSlideshow && photoLinks.length > 1) {
-  const frame = heroSlideshow.querySelector('.hero-slides');
-  const controls = heroSlideshow.querySelector('.hero-slide-controls');
-  const playback = heroSlideshow.querySelector('.hero-playback');
-  const counter = document.querySelector('#hero-photo-count');
-  const motion = window.matchMedia?.('(prefers-reduced-motion: reduce)');
-  let current = 0, timer, loading = false, paused = !!motion?.matches;
-  let hovered = false, inView = true;
-  let active = frame.querySelector('img');
-  let standby = document.createElement('img');
-  standby.className = 'hero-slide'; standby.alt = ''; standby.setAttribute('aria-hidden', 'true');
-  standby.width = 1200; standby.height = 1600; standby.decoding = 'async';
-  frame.append(standby);
-  function scheduleSlide() {
-    clearTimeout(timer);
-    if (!paused && !hovered && inView && !document.hidden && !loading) timer = setTimeout(() => changeSlide(1), 6000);
-  }
-  function setPaused(value) {
-    paused = value;
-    playback.textContent = paused ? 'Play' : 'Pause';
-    playback.setAttribute('aria-label', paused ? 'Play slideshow' : 'Pause slideshow');
-    counter.setAttribute('aria-live', paused ? 'polite' : 'off');
-    scheduleSlide();
-  }
-  async function changeSlide(direction) {
-    if (loading) return;
-    clearTimeout(timer); loading = true;
-    const next = (current + direction + photoLinks.length) % photoLinks.length;
-    const link = photoLinks[next], source = link.querySelector('img');
-    standby.alt = source.alt;
-    standby.sizes = active.sizes;
-    standby.srcset = `${source.getAttribute('src')} 640w, ${link.getAttribute('href')} ${source.getAttribute('width')}w`;
-    standby.src = link.href;
-    try {
-      // Retain the current photo until the replacement is ready.
-      await standby.decode();
-      active.classList.remove('is-active'); active.setAttribute('aria-hidden', 'true');
-      standby.classList.add('is-active'); standby.removeAttribute('aria-hidden');
-      [active, standby] = [standby, active];
-      current = next;
-      document.querySelector('#hero-photo-caption').textContent = link.closest('figure').querySelector('figcaption').textContent;
-      counter.textContent = `${current + 1} / ${photoLinks.length}`;
-    } catch {
-      // A failed photo should never replace a working one with an empty frame.
-      setPaused(true);
-    } finally { loading = false; scheduleSlide(); }
-  }
-  heroSlideshow.querySelector('.hero-previous').addEventListener('click', () => { setPaused(true); changeSlide(-1); });
-  heroSlideshow.querySelector('.hero-next').addEventListener('click', () => { setPaused(true); changeSlide(1); });
-  playback.addEventListener('click', () => setPaused(!paused));
-  heroSlideshow.addEventListener('pointerenter', () => { hovered = true; scheduleSlide(); });
-  heroSlideshow.addEventListener('pointerleave', () => { hovered = false; scheduleSlide(); });
-  heroSlideshow.addEventListener('focusin', event => { if (event.target !== playback) setPaused(true); });
-  document.addEventListener('visibilitychange', scheduleSlide);
-  motion?.addEventListener('change', event => { if (event.matches) setPaused(true); });
-  if ('IntersectionObserver' in window) new IntersectionObserver(entries => {
-    inView = entries[0].isIntersecting; scheduleSlide();
-  }).observe(heroSlideshow);
-  controls.hidden = false;
-  setPaused(paused);
-}
-
-connect();
 
 })();

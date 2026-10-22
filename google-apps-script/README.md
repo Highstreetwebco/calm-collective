@@ -1,3 +1,17 @@
+## October 2026 website form update
+
+The public website now uses the five fields in the supplied PowerPoint: name, email, room, dates and questions. All public email links use `calmcollectiverooms@gmail.com`.
+
+**GitHub Pages deployment does not deploy this Google Apps Script.** To enable direct form delivery, update the existing Apps Script project with `Code.gs`, then use Deploy → Manage deployments → Edit → New version → Deploy. Retain the existing deployment URL in `booking-config.js`.
+
+The website calls the read-only `contact-health` endpoint. Direct sending is enabled only when it returns `ok: true`, `mode: "room-enquiry"` and `recipient: "calmcollectiverooms@gmail.com"`. Until then, the form explicitly prepares an email in the visitor’s email app, with a copy option. It never claims an email draft has been sent or routes it through the previous mailbox.
+
+The new `contact` action validates name/email/room and sends to the new address. It accepts flexible dates and does not book a calendar slot. Existing calendar actions remain compatible with their original internal keys; room 1 (`calm`) is now Solace and room 2 (`still`) is now Calm. New contact-form room keys are `solace`, `calm`, `haven`, and `any`.
+
+After deploying the Google script, verify health and submit a deliberate test enquiry to check mailbox receipt. No test emails were sent as part of the GitHub update.
+
+---
+
 # Connect the Calm Collective business calendar
 
 The website is a room-hire service, not a therapy appointment service. The new interface distinguishes viewing requests and room-hire requests. It never describes a request as confirmed.

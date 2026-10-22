@@ -1,6 +1,7 @@
 /** Calm Collective calendar bridge v2. Configure Script Properties; see README.md. */
 const TIME_ZONE = 'Europe/London';
-const ROOM_NAMES = { calm: 'The Calm Room', still: 'The Still Room', haven: 'The Haven Room', any: 'Help me choose' };
+// Legacy calendar keys stay stable: room 1 is calm, room 2 is still.
+const ROOM_NAMES = { calm: 'Solace', still: 'Calm', haven: 'Haven', any: 'Help me choose' };
 function settings_() {
   const p = PropertiesService.getScriptProperties().getProperties();
   return { email: p.BUSINESS_EMAIL || '', viewing: p.VIEWING_CALENDAR_ID || '', host: p.HOST_CALENDAR_ID || '',
@@ -13,7 +14,9 @@ function doGet(event) {
   let result;
   try {
     const config = settings_();
-    if (p.action === 'booking-health') {
+    if (p.action === 'contact-health') {
+      result = { ok: true, mode: 'room-enquiry', recipient: 'calmcollectiverooms@gmail.com' };
+    } else if (p.action === 'booking-health') {
       if (!validEmail_(config.email)) throw new Error('Business contact is not configured.');
       // Capability discovery checks access before offering any calendar-backed times.
       const accessible = id => { try { return !!id && !!CalendarApp.getCalendarById(id); } catch (_) { return false; } };
@@ -39,7 +42,8 @@ function doPost(event) {
     id = validId_(payload.requestId);
     lock = LockService.getScriptLock();
     if (!lock.tryLock(15000)) throw new Error('Busy');
-    processRequest_(payload);
+    if (payload.action === 'contact') processContact_(payload);
+    else processRequest_(payload);
   } catch (_) {
     if (id && lock && lock.hasLock()) {
       const properties = PropertiesService.getScriptProperties();
@@ -179,3 +183,27 @@ function installApprovalTrigger() {
 function clean_(value, limit) { return String(value == null ? '' : value).trim().slice(0,limit); }
 function validEmail_(email) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email || ''); }
 function validId_(id) { if (!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(id || '')) throw new Error('Invalid reference'); return id; }
+
+/** Five-field room enquiry. No calendar hold, phone number or clinical details. */
+function processContact_(payload) {
+  const properties = PropertiesService.getScriptProperties();
+  const id = validId_(payload.requestId);
+  if (properties.getProperty('request:' + id)) return;
+  const roomNames = { solace: 'Room 1 — Solace', calm: 'Room 2 — Calm', haven: 'Room 3 — Haven', any: 'Help me choose / general enquiry' };
+  const name = clean_(payload.name, 100), email = clean_(payload.email, 160).toLowerCase();
+  const dates = clean_(payload.dates, 300), notes = clean_(payload.notes, 1000);
+  if (payload.website || !name || !validEmail_(email) || !Object.prototype.hasOwnProperty.call(roomNames, payload.room)) throw new Error('Invalid enquiry');
+  const rateKey = 'rate:' + Utilities.base64EncodeWebSafe(email);
+  if (CacheService.getScriptCache().get(rateKey)) throw new Error('Please wait before sending another enquiry');
+  properties.setProperty('request:' + id, JSON.stringify({ state: 'processing', at: Date.now() }));
+  // A send exception can leave delivery uncertain; retain processing and do not retry.
+  MailApp.sendEmail({
+    to: 'calmcollectiverooms@gmail.com', replyTo: email, name: 'Calm Collective',
+    subject: 'Calm Collective room enquiry',
+    body: ['Name: ' + name, 'Email: ' + email, 'Room: ' + roomNames[payload.room],
+      'Dates: ' + (dates || 'Flexible / to discuss'), 'Questions: ' + (notes || 'None'),
+      'Reference: ' + id, 'This is an enquiry, not a confirmed booking.'].join('\n')
+  });
+  properties.setProperty('request:' + id, JSON.stringify({ state: 'received', at: Date.now() }));
+  CacheService.getScriptCache().put(rateKey, '1', 300);
+}
