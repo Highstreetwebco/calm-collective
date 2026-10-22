@@ -26,9 +26,6 @@
 .coastal-hero .coastal-photo>img,.coastal-hero .hero-video{display:block;width:100%;height:100%;max-width:none;aspect-ratio:auto;object-fit:cover;object-position:center}
 .coastal-hero .hero-video{position:absolute;inset:0;opacity:0;pointer-events:none}
 .coastal-hero .hero-video.is-ready{opacity:1}
-.video-toggle{position:absolute;right:2rem;bottom:1.5rem;min-height:44px;padding:.6rem .9rem;border:1px solid #fffdf880;border-radius:4px;background:#102b23b3;color:#fffdf8;font:inherit;font-size:.78rem;cursor:pointer}
-.video-toggle:hover{background:#102b23e6}
-.video-toggle[hidden]{display:none}
 .coastal-hero::before{content:'';position:absolute;inset:0;z-index:-1;background:linear-gradient(90deg,rgba(10,34,30,.77) 0%,rgba(10,34,30,.54) 38%,rgba(10,34,30,.08) 72%),linear-gradient(180deg,rgba(10,34,30,.5),transparent 28%,rgba(10,34,30,.14))}
 .coastal-hero .hero-copy{max-width:640px;color:#fffdf8}
 .coastal-hero h1{font-size:clamp(3.3rem,5.3vw,6.2rem);line-height:1.04;text-shadow:0 2px 20px #132d2a33}
@@ -42,7 +39,6 @@
  .site-header nav{background:var(--forest);border-color:#587367;box-shadow:0 10px 20px #102b2326}
  .coastal-hero{padding:120px 6% 110px;gap:0;align-items:center}
  .coastal-hero .coastal-photo>img,.coastal-hero .hero-video{object-position:70% center}
- .video-toggle{right:6%;bottom:88px}
  .coastal-hero::before{background:linear-gradient(90deg,rgba(10,34,30,.68),rgba(10,34,30,.25)),linear-gradient(180deg,rgba(10,34,30,.38),transparent 60%,rgba(10,34,30,.15))}
  .coastal-hero h1{font-size:clamp(2.8rem,10.4vw,4.8rem);line-height:1.07}
  .coastal-hero .hero-intro{font-size:1.05rem;margin:1.4rem 0 1.8rem;max-width:23rem}
