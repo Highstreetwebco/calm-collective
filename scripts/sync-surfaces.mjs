@@ -9,7 +9,7 @@ writeFileSync('app/globals.css',readFileSync('style.css','utf8'));
 writeFileSync('public/calm-runtime.js',readFileSync('booking-config.js','utf8')+'\n'+readFileSync('script.js','utf8'));
 for (const file of ['style.css','privacy.html','terms.html']) copyFileSync(file,`public/${file}`);
 mkdirSync('dist/public',{recursive:true});
-for (const file of ['index.html','style.css','script.js','booking-config.js','privacy.html','terms.html','robots.txt','sitemap.xml']) copyFileSync(file,`dist/${file}`);
+for (const file of ['CNAME','index.html','style.css','script.js','booking-config.js','privacy.html','terms.html','robots.txt','sitemap.xml']) copyFileSync(file,`dist/${file}`);
 for (const file of ['therapy-room.png','calm-collective-warwick-clean.webp','calm-collective-window.png','favicon.svg']) copyFileSync(`public/${file}`,`dist/public/${file}`);
 
 cpSync("public/photos", "dist/public/photos", { recursive: true });
