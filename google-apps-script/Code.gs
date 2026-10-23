@@ -15,7 +15,7 @@ function doGet(event) {
   try {
     const config = settings_();
     if (p.action === 'contact-health') {
-      result = { ok: true, mode: 'room-enquiry', recipient: 'calmcollectiverooms@gmail.com' };
+      result = { ok: true, mode: 'room-enquiry', recipient: 'calmcollectiverooms@gmail.com', phone: true };
     } else if (p.action === 'booking-health') {
       if (!validEmail_(config.email)) throw new Error('Business contact is not configured.');
       // Capability discovery checks access before offering any calendar-backed times.
@@ -184,13 +184,14 @@ function clean_(value, limit) { return String(value == null ? '' : value).trim()
 function validEmail_(email) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email || ''); }
 function validId_(id) { if (!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(id || '')) throw new Error('Invalid reference'); return id; }
 
-/** Five-field room enquiry. No calendar hold, phone number or clinical details. */
+/** Room enquiry with an optional phone number. No calendar hold. */
 function processContact_(payload) {
   const properties = PropertiesService.getScriptProperties();
   const id = validId_(payload.requestId);
   if (properties.getProperty('request:' + id)) return;
   const roomNames = { solace: 'Room 1 — Solace', calm: 'Room 2 — Calm', haven: 'Room 3 — Haven', any: 'Help me choose / general enquiry' };
   const name = clean_(payload.name, 100), email = clean_(payload.email, 160).toLowerCase();
+  const phone = clean_(payload.phone, 40);
   const dates = clean_(payload.dates, 300), notes = clean_(payload.notes, 1000);
   if (payload.website || !name || !validEmail_(email) || !Object.prototype.hasOwnProperty.call(roomNames, payload.room)) throw new Error('Invalid enquiry');
   const rateKey = 'rate:' + Utilities.base64EncodeWebSafe(email);
@@ -200,7 +201,7 @@ function processContact_(payload) {
   MailApp.sendEmail({
     to: 'calmcollectiverooms@gmail.com', replyTo: email, name: 'Calm Collective',
     subject: 'Calm Collective room enquiry',
-    body: ['Name: ' + name, 'Email: ' + email, 'Room: ' + roomNames[payload.room],
+    body: ['Name: ' + name, 'Email: ' + email, 'Phone: ' + (phone || 'Not provided'), 'Room: ' + roomNames[payload.room],
       'Dates: ' + (dates || 'Flexible / to discuss'), 'Questions: ' + (notes || 'None'),
       'Reference: ' + id, 'This is an enquiry, not a confirmed booking.'].join('\n')
   });

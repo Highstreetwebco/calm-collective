@@ -61,15 +61,15 @@ test('status endpoint returns no customer information',()=>{
  const x=setup();x.post(x.payload);const response=x.context.doGet({parameter:{action:'status',requestId:x.payload.requestId,callback:'test'}}).text;assert.equal(response,'test({"ok":true,"state":"pending"});');
 });
 
-test('five-field enquiry sends to the new mailbox with correct room and flexible dates',()=>{
- const x=setup();const p={action:'contact',requestId:x.payload.requestId,name:'Test practitioner',email:'test@example.com',room:'calm',dates:'Tuesday afternoons in November',notes:'I would like to arrange a viewing.'};
+test('room enquiry includes the optional phone number, correct room and flexible dates',()=>{
+ const x=setup();const p={action:'contact',requestId:x.payload.requestId,name:'Test practitioner',email:'test@example.com',phone:'+44 7700 900123',room:'calm',dates:'Tuesday afternoons in November',notes:'I would like to arrange a viewing.'};
  x.post(p);x.post(p);assert.equal(x.state(p.requestId),'received');assert.equal(x.mail.length,1);
  assert.equal(x.mail[0].to,'calmcollectiverooms@gmail.com');assert.equal(x.mail[0].replyTo,p.email);
- assert.match(x.mail[0].body,/Room 2 — Calm/);assert.match(x.mail[0].body,/Tuesday afternoons in November/);
+ assert.match(x.mail[0].body,/Phone: \+44 7700 900123/);assert.match(x.mail[0].body,/Room 2 — Calm/);assert.match(x.mail[0].body,/Tuesday afternoons in November/);
  assert.equal(x.calendars.calm.events.length,0);
 });
 test('contact health confirms the supported form and recipient without exposing private details',()=>{
- const x=setup();assert.equal(x.context.doGet({parameter:{action:'contact-health',callback:'test'}}).text,'test({"ok":true,"mode":"room-enquiry","recipient":"calmcollectiverooms@gmail.com"});');
+ const x=setup();assert.equal(x.context.doGet({parameter:{action:'contact-health',callback:'test'}}).text,'test({"ok":true,"mode":"room-enquiry","recipient":"calmcollectiverooms@gmail.com","phone":true});');
 });
 test('invalid contact enquiries never send email',()=>{
  for(const change of [{email:'invalid'},{name:'  '},{room:'unknown'},{website:'bot'}]) {

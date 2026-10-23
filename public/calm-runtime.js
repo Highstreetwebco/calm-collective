@@ -41,6 +41,7 @@ function enquiryText() {
     'Calm Collective room enquiry', '',
     `Name: ${String(data.get('name')).trim()}`,
     `Email: ${String(data.get('email')).trim()}`,
+    `Phone: ${String(data.get('phone') || '').trim() || 'Not provided'}`,
     `Room: ${form.elements.room.selectedOptions[0].textContent}`,
     `Dates: ${String(data.get('dates')).trim() || 'Flexible / to discuss'}`,
     `Questions: ${String(data.get('notes')).trim() || 'None'}`,
@@ -104,9 +105,9 @@ document.querySelectorAll('[data-intent="viewing"]').forEach(link => link.addEve
   if (!form.elements.notes.value.trim()) form.elements.notes.value = 'I’d like to arrange a viewing.';
 }));
 // Enable direct delivery only when the deployed bridge explicitly supports the
-// five-field form AND confirms the new mailbox. Never send through the old route.
+// phone field AND confirms the current mailbox, so contact details are not lost.
 jsonp({ action: 'contact-health' }).then(health => {
-  if (submitting || submitted || !health.ok || health.mode !== 'room-enquiry' || health.recipient !== recipient) return;
+  if (submitting || submitted || !health.ok || health.mode !== 'room-enquiry' || health.phone !== true || health.recipient !== recipient) return;
   directDelivery = true;
   submit.textContent = 'Send enquiry';
   delivery.textContent = 'Send your enquiry to the Calm Collective team. We’ll reply by email to discuss your room and dates.';
@@ -121,6 +122,55 @@ document.addEventListener('keydown', event => { if (event.key === 'Escape') clos
 if ('IntersectionObserver' in window) new IntersectionObserver(entries => {
   document.querySelector('.mobile-booking').classList.toggle('is-hidden', entries[0].isIntersecting);
 }, { threshold: 0 }).observe(document.querySelector('#booking'));
+// Each figure is a slide; adding a room photo automatically adds its navigation dot.
+document.querySelectorAll('[data-room-carousel]').forEach(carousel => {
+  const track = carousel.querySelector('.carousel-track');
+  const slides = [...track.querySelectorAll('.carousel-slide')];
+  const controls = carousel.querySelector('.carousel-controls');
+  const dots = carousel.querySelector('.carousel-dots');
+  const announcement = carousel.querySelector('.carousel-status');
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+  let current = 0, scrollTimer;
+  const buttons = slides.map((slide, index) => {
+    slide.setAttribute('role', 'group');
+    slide.setAttribute('aria-roledescription', 'slide');
+    slide.setAttribute('aria-label', `${index + 1} of ${slides.length}`);
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'carousel-dot';
+    button.setAttribute('aria-label', `Show Solace photo ${index + 1}`);
+    button.setAttribute('aria-controls', track.id);
+    button.addEventListener('click', () => showSlide(index));
+    dots.append(button);
+    return button;
+  });
+  function updateControls() {
+    buttons.forEach((button, index) => button.setAttribute('aria-current', String(index === current)));
+    announcement.textContent = `Solace photo ${current + 1} of ${slides.length}`;
+  }
+  function showSlide(index, smooth = true) {
+    current = (index + slides.length) % slides.length;
+    updateControls();
+    track.scrollTo({ left: current * track.clientWidth, behavior: smooth && !reducedMotion.matches ? 'smooth' : 'instant' });
+  }
+  controls.querySelector('.carousel-previous').addEventListener('click', () => showSlide(current - 1));
+  controls.querySelector('.carousel-next').addEventListener('click', () => showSlide(current + 1));
+  carousel.addEventListener('keydown', event => {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+    event.preventDefault();
+    showSlide(current + (event.key === 'ArrowRight' ? 1 : -1));
+  });
+  track.addEventListener('scroll', () => {
+    clearTimeout(scrollTimer);
+    scrollTimer = setTimeout(() => {
+      current = Math.max(0, Math.min(slides.length - 1, Math.round(track.scrollLeft / track.clientWidth)));
+      updateControls();
+    }, 150);
+  }, { passive: true });
+  if ('ResizeObserver' in window) new ResizeObserver(() => showSlide(current, false)).observe(track);
+  controls.hidden = slides.length < 2;
+  updateControls();
+});
 // Native dialog keeps keyboard focus inside the full-size photograph viewer.
 const photoLinks = [...document.querySelectorAll('.gallery-open')];
 const photoViewer = document.querySelector('#photo-viewer');
