@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://highstreetwebco.github.io/calm-collective/sitemap.xml
+Sitemap: https://calmcollectivewarwick.co.uk/sitemap.xml
