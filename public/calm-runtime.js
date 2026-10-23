@@ -130,7 +130,15 @@ document.querySelectorAll('[data-room-carousel]').forEach(carousel => {
   const dots = carousel.querySelector('.carousel-dots');
   const announcement = carousel.querySelector('.carousel-status');
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
-  let current = 0, scrollTimer;
+  let current = 0, scrollTimer, rotationTimer, targetSlide = null;
+  function restartRotation() {
+    clearTimeout(rotationTimer);
+    if (slides.length < 2 || document.hidden || reducedMotion.matches || carousel.contains(document.activeElement)) return;
+    rotationTimer = setTimeout(() => {
+      if (!document.querySelector('#photo-viewer')?.open) showSlide(current + 1);
+      else restartRotation();
+    }, 5000);
+  }
   const buttons = slides.map((slide, index) => {
     slide.setAttribute('role', 'group');
     slide.setAttribute('aria-roledescription', 'slide');
@@ -146,12 +154,15 @@ document.querySelectorAll('[data-room-carousel]').forEach(carousel => {
   });
   function updateControls() {
     buttons.forEach((button, index) => button.setAttribute('aria-current', String(index === current)));
+    announcement.setAttribute('aria-live', carousel.contains(document.activeElement) ? 'polite' : 'off');
     announcement.textContent = `Solace photo ${current + 1} of ${slides.length}`;
   }
   function showSlide(index, smooth = true) {
     current = (index + slides.length) % slides.length;
+    targetSlide = current;
     updateControls();
     track.scrollTo({ left: current * track.clientWidth, behavior: smooth && !reducedMotion.matches ? 'smooth' : 'instant' });
+    restartRotation();
   }
   controls.querySelector('.carousel-previous').addEventListener('click', () => showSlide(current - 1));
   controls.querySelector('.carousel-next').addEventListener('click', () => showSlide(current + 1));
@@ -163,13 +174,23 @@ document.querySelectorAll('[data-room-carousel]').forEach(carousel => {
   track.addEventListener('scroll', () => {
     clearTimeout(scrollTimer);
     scrollTimer = setTimeout(() => {
+      if (targetSlide !== null && Math.abs(track.scrollLeft - targetSlide * track.clientWidth) > 2) return;
+      targetSlide = null;
       current = Math.max(0, Math.min(slides.length - 1, Math.round(track.scrollLeft / track.clientWidth)));
       updateControls();
     }, 150);
   }, { passive: true });
+  carousel.addEventListener('focusin', restartRotation);
+  carousel.addEventListener('focusout', () => setTimeout(restartRotation, 0));
+  track.addEventListener('pointerdown', () => { clearTimeout(rotationTimer); targetSlide = null; });
+  window.addEventListener('pointerup', restartRotation);
+  window.addEventListener('pointercancel', restartRotation);
+  document.addEventListener('visibilitychange', restartRotation);
+  reducedMotion.addEventListener('change', restartRotation);
   if ('ResizeObserver' in window) new ResizeObserver(() => showSlide(current, false)).observe(track);
   controls.hidden = slides.length < 2;
   updateControls();
+  restartRotation();
 });
 // Native dialog keeps keyboard focus inside the full-size photograph viewer.
 const photoLinks = [...document.querySelectorAll('.gallery-open')];
